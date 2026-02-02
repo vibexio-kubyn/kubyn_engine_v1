@@ -1,6 +1,8 @@
-def determine_personality(q):
+from typing import Dict, Any
+
+def determine_personality(q: Dict[str, Any]) -> str:
     """
-    Six personality matches:
+    Six personalities:
     - The Adventurer
     - The Hedonist
     - The Minimalist
@@ -18,43 +20,64 @@ def determine_personality(q):
         "The Caregiver": 0
     }
 
-    stress_spending = q.get("stress_spending", "")
-    if stress_spending == "Yes":
-        scores["The Hedonist"] += 4
-
-    weekly_spending = q.get("weekly_spending", q.get("spending_level", "medium"))
-    if weekly_spending == "low":
-        scores["The Minimalist"] += 5
-    elif weekly_spending == "high":
+    # Emotional & stress spending
+    stress = str(q.get("stress_spending", "")).lower()
+    if stress == "yes":
         scores["The Hedonist"] += 3
 
-    spending_decision = q.get("spending_decision", "")
-    if spending_decision == "Mix of both":
-        scores["The Creator"] += 3
-    elif spending_decision == "Planned":
+    # Weekly spending intensity (numeric)
+    weekly_raw = q.get("weekly_spending")
+    try:
+        weekly = int(str(weekly_raw))
+        if weekly < 1000:
+            scores["The Minimalist"] += 3
+        elif weekly > 3000:
+            scores["The Hedonist"] += 2
+    except:
+        pass
+
+    # Spending decision style
+    spending = str(q.get("spending_decision", "")).lower()
+    if spending == "planned":
         scores["The Achiever"] += 2
+    elif spending == "mix of both":
+        scores["The Creator"] += 2
+    elif spending == "impulsive":
+        scores["The Hedonist"] += 2
 
-    goal_frequency = q.get("goal_frequency", "")
-    if goal_frequency == "3" or "monthly" in str(goal_frequency).lower():
-        scores["The Achiever"] += 5
+ 
+    # Goal frequency (drive)
+    goal_freq = str(q.get("goal_frequency", "3"))
+    if goal_freq in ("4", "5"):
+        scores["The Achiever"] += 3
+    elif goal_freq in ("1", "2"):
+        scores["The Adventurer"] += 1
 
-    overspend_category = q.get("overspend_category", q.get("spending_category", ""))
-    if overspend_category == "Family":
-        scores["The Caregiver"] += 5
-    elif overspend_category == "Entertainment":
-        scores["The Hedonist"] += 3
-
-    short_term_goal = q.get("short_term_goal", "")
-    if short_term_goal == "Yes":
-        scores["The Adventurer"] += 4
-
-    # Demographic factors
-    employment_status = q.get("employment_status", "")
-    if "salaried" in employment_status.lower():
-        scores["The Achiever"] += 2
-    
-    marital_status = q.get("marital_status", "")
-    if "married" in marital_status.lower():
+    # Overspending category (values)
+    overspend = str(q.get("overspend_category", "")).lower()
+    if overspend in ("family", "education", "health","food"):
         scores["The Caregiver"] += 3
+    elif overspend in ("shopping", "entertainment", "travel"):
+        scores["The Hedonist"] += 2
 
+    # Short-term goals (exploration)
+    short_term = str(q.get("short_term_goal", "")).lower()
+    if short_term == "yes":
+        scores["The Adventurer"] += 3
+
+    # Employment (achievement orientation)
+    employment = str(q.get("employment_status", "")).lower()
+
+    if employment in ("private", "government"):
+        scores["The Achiever"] += 2
+    elif employment == "self-employed":
+        scores["The Creator"] += 2
+    elif employment == "student":
+        scores["The Adventurer"] += 1
+
+    # Marital status (care orientation)
+    marital = str(q.get("marital_status", "")).lower()
+    if marital == "married":
+        scores["The Caregiver"] += 2
+    
     return max(scores, key=scores.get)
