@@ -1,11 +1,23 @@
 import sys
 import os
-from fastapi import FastAPI
+import logging
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Import engine2 once
+import engine2
+
+# Logging config
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("engine2-api")
+
 app = FastAPI(title="Engine 2 API")
+
+class Engine2Payload(BaseModel):
+    user_id: str
 
 @app.get("/")
 def root():
@@ -16,31 +28,24 @@ def health():
     return {"status": "healthy", "engine": "engine2"}
 
 @app.post("/engine2/process")
-def trigger_engine2(payload: dict):
+def trigger_engine2(payload: Engine2Payload):
     """
     Triggers Engine 2 when finance / goal events happen
     """
-
-    print("ENGINE 2 API HIT")
-    print("PAYLOAD:", payload)
-
-    user_id = payload.get("user_id")
-
-    if not user_id:
-        return {"status": "error", "message": "user_id missing"}
+    logger.info(f"ENGINE 2 API HIT | user_id={payload.user_id}")
 
     try:
-        # Import engine2 module
-        import engine2
-        # CALL ENGINE 2 CORE
-        result = engine2.run_engine2(user_id=user_id)
+        result = engine2.run_engine2(user_id=payload.user_id)
 
         return {
             "status": "success",
             "engine": "engine2",
             "result": result
         }
-    except ImportError as e:
-        return {"status": "error", "message": f"Cannot import engine2: {str(e)}"}
+
     except Exception as e:
-        return {"status": "error", "message": f"Engine 2 processing error: {str(e)}"}
+        logger.exception("Engine 2 processing failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Engine 2 processing error: {str(e)}"
+        )

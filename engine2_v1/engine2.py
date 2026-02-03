@@ -1,194 +1,116 @@
-import sys
-
-import os
-
 import json
+import logging
 
-import traceback
- 
-# ✅ ADD PROJECT ROOT ONCE (VERY IMPORTANT)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("engine2-core")
 
-PROJECT_ROOT = "/home/ubuntu/engine_v1"
-
-if PROJECT_ROOT not in sys.path:
-
-    sys.path.insert(0, PROJECT_ROOT)
- 
 from expense import analyse_expenses
-
 from surplus import simulate_surplus
-
 from llm_advice import generate_llm_suggestion
-
 from db import execute
- 
- 
+
 def run_engine2(user_id, days=7):
-
     """
-
     Runs Engine-2 end to end and stores outputs.
-
     """
- 
-    # 1. Expense analysis
+    logger.info(f"Engine-2 started | user_id={user_id}")
 
-    expense_summary = analyse_expenses(user_id, days)
+    # 1. Expense analysis for the past 7 days.
+    try:
+        expense_summary = analyse_expenses(user_id, days) #calculating expense for last 7 days.
+        expense_total = expense_summary.get("total_spent", 0) # for the past 7 days.
+    except Exception as e:
+        logger.exception("Expense analysis failed")
+        raise RuntimeError("Expense analysis failed") from e
 
-    expense_total = expense_summary["total_spent"]
- 
-    # 2. Surplus simulation
+    # 2. Surplus simulation 
+    try:
+        surplus_result = simulate_surplus(user_id=user_id)
+    except Exception as e:
+        logger.exception("Surplus simulation failed")
+        raise RuntimeError("Surplus simulation failed") from e
 
-    surplus_result = simulate_surplus(
-
-        user_id=user_id,
-
-        expense_total=expense_total
-
-    )
- 
     # 3. LLM suggestion
+    try:
+        recommendation = generate_llm_suggestion(
+            user_id=user_id,
+            expense_summary=expense_summary,
+            goal_summary=surplus_result
+        )
+    except Exception as e:
+        logger.exception("LLM advice generation failed")
+        recommendation = "AI advice could not be generated at this time."
 
-    recommendation = generate_llm_suggestion(
+    #4. Store Engine-2 output
+    try:
+        execute("""
+            INSERT INTO engine2_scores
+            (user_id, runTimestamp, llm_explainer,
+             surplus_snapshot, expense_snapshot, engine_version)
+            VALUES (%s, NOW(), %s, %s, %s, %s)
+        """, (
+            user_id,
+            recommendation,
+            json.dumps(surplus_result, default=str),
+            json.dumps(expense_summary, default=str),
+            "v1"
+        ))
+    except Exception:
+        logger.exception("Failed to store Engine-2 results (continuing)")
 
-        user_id=user_id,
+    # ENGINE 3 & 4 STATUS
+    engine3_status, engine3_error = "not_run", None
+    engine4_status, engine4_error = "not_run", None
 
-        expense_summary=expense_summary,
-
-        goal_summary=surplus_result
-
-    )
- 
-    # 4. Store Engine 2 output
-
-    execute("""
-
-        INSERT INTO engine2_scores
-
-        (user_id, runTimestamp, llm_explainer,
-
-         surplus_snapshot, expense_snapshot, engine_version)
-
-        VALUES (%s, NOW(), %s, %s, %s, %s)
-
-    """, (
-
-        user_id,
-
-        recommendation,
-
-        json.dumps(surplus_result, default=str),
-
-        json.dumps(expense_summary, default=str),
-
-        "v1"
-
-    ))
- 
-    # Engine status tracking
-
-    engine3_status = "not_run"
-
-    engine3_error = None
-
-    engine4_status = "not_run"
-
-    engine4_error = None
- 
     user_id_str = str(user_id)
- 
-    # ---------------- ENGINE 3 ----------------
 
+    #ENGINE 3
     try:
-
         from engine3_v1.engine3 import run_engine3
- 
         result = run_engine3(user_id_str)
- 
-        if result and "error" not in result:
 
+        if result and "error" not in result:
             engine3_status = "completed"
-
         else:
-
             engine3_status = "failed"
-
             engine3_error = result.get("error") if result else "Unknown error"
- 
-    except ImportError as e:
 
-        engine3_status = "import_error"
-
-        engine3_error = str(e)
-
-        traceback.print_exc()
- 
     except Exception as e:
-
-        engine3_status = "runtime_error"
-
+        engine3_status = "error"
         engine3_error = str(e)
+        logger.exception("Engine-3 execution failed")
 
-        traceback.print_exc()
- 
-    # ---------------- ENGINE 4 ----------------
-
+    #ENGINE 4
     try:
-
         from engine4_v1.engine4 import run_engine4
- 
         result = run_engine4(user_id_str)
- 
+
         if result and "error" not in result:
-
             engine4_status = "completed"
-
         else:
-
             engine4_status = "failed"
-
             engine4_error = result.get("error") if result else "Unknown error"
- 
-    except ImportError as e:
 
-        engine4_status = "import_error"
-
-        engine4_error = str(e)
-
-        traceback.print_exc()
- 
     except Exception as e:
-
-        engine4_status = "runtime_error"
-
+        engine4_status = "error"
         engine4_error = str(e)
+        logger.exception("Engine-4 execution failed")
 
-        traceback.print_exc()
- 
-    # Final response
-
+    #FINAL RESPONSE
     response = {
-
         "expense_analysis": expense_summary,
-
         "surplus_simulation": surplus_result,
-
         "ai_suggestion": recommendation,
-
         "engine3_status": engine3_status,
-
         "engine4_status": engine4_status
-
     }
- 
+
     if engine3_error:
-
         response["engine3_error"] = engine3_error
- 
+
     if engine4_error:
-
         response["engine4_error"] = engine4_error
- 
-    return response
 
- 
+    logger.info(f"Engine-2 completed | user_id={user_id}")
+
+    return response
