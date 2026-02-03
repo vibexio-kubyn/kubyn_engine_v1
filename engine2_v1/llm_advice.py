@@ -1,60 +1,51 @@
 import requests
 import pymysql
-from config import DEEPSEEK_CONFIG
+import logging
+from config import DEEPSEEK_CONFIG, MYSQL_CONFIG
 
+logger = logging.getLogger("engine2-llm")
+
+# Fetch Engine 1 scores
 def fetch_engine1_scores(user_id):
-    """Fetch Engine 1 scores from database using pymysql"""
     try:
         conn = pymysql.connect(
-            host="localhost",
-            user="kubyn",
-            password="Venkat@3929",
-            database="kubyn",
-            port=3306
+            **MYSQL_CONFIG,
+            cursorclass=pymysql.cursors.DictCursor
         )
-        
+
         with conn.cursor() as cursor:
             cursor.execute("""
-                SELECT confidence_score, income_score, expense_score, savings_score, 
-                       archetype, personality_type 
-                FROM engine1_scores 
-                WHERE user_id = %s 
-                ORDER BY run_timestamp DESC 
+                SELECT confidence_score,
+                       income_score,
+                       expense_score,
+                       savings_score,
+                       archetype,
+                       personality_type
+                FROM engine1_scores
+                WHERE user_id = %s
+                ORDER BY run_timestamp DESC
                 LIMIT 1
             """, (user_id,))
-            
+
             row = cursor.fetchone()
-            conn.close()
-            
-            if row:
-                confidence_score, income_score, expense_score, savings_score, archetype, personality_type = row
-                # Calculate income_expense_score as average of income and expense scores
-                income_expense_score = (income_score + expense_score) // 2
-                
-                return {
-                    "confidence_score": confidence_score,
-                    "income_score": income_score,
-                    "expense_score": expense_score,
-                    "savings_score": savings_score,
-                    "income_expense_score": income_expense_score,
-                    "personality_type": personality_type,
-                    "archetype": archetype
-                }
-            else:
-                # Return default scores if not found
-                return {
-                    "confidence_score": 50,
-                    "income_score": 50,
-                    "expense_score": 50,
-                    "savings_score": 50,
-                    "income_expense_score": 50,
-                    "personality_type": "Adventurer",
-                    "archetype": "Safety Netter"
-                }
-                
+
+        conn.close()
+
+        if not row:
+            raise ValueError("No Engine-1 data found")
+
+        return {
+            "confidence_score": row["confidence_score"],
+            "income_score": row["income_score"],
+            "expense_score": row["expense_score"],
+            "savings_score": row["savings_score"],
+            "income_expense_score": (row["income_score"] + row["expense_score"]) // 2,
+            "personality_type": row["personality_type"],
+            "archetype": row["archetype"]
+        }
+
     except Exception as e:
-        print(f"Error fetching engine1 scores: {e}")
-        # Return default scores on error
+        logger.warning(f"Using default Engine-1 scores | user_id={user_id} | {e}")
         return {
             "confidence_score": 50,
             "income_score": 50,
@@ -65,20 +56,21 @@ def fetch_engine1_scores(user_id):
             "archetype": "Safety Netter"
         }
 
+# DeepSeek LLM call
 def deepseek_generate(prompt):
-    """Generate response using DeepSeek API"""
+    """
+    Generate response using DeepSeek LLM.
+    """
     try:
         response = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
+            DEEPSEEK_CONFIG["url"],
             headers={
                 "Authorization": f"Bearer {DEEPSEEK_CONFIG['api_key']}",
                 "Content-Type": "application/json"
             },
             json={
                 "model": DEEPSEEK_CONFIG["model"],
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
+                "messages": [{"role": "user", "content": prompt}],
                 "temperature": DEEPSEEK_CONFIG["temperature"],
                 "max_tokens": DEEPSEEK_CONFIG["max_tokens"]
             },
@@ -87,15 +79,20 @@ def deepseek_generate(prompt):
 
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        print(f"DeepSeek API error: {e}")
-        # Return fallback response
-        return """I notice you're reviewing your financial patterns. Let's focus on one spending area that could be adjusted slightly. 
-Based on your goals, consider allocating a small portion of any surplus to build momentum. 
-Remember, consistent small steps lead to meaningful progress over time."""
 
+    except Exception as e:
+        logger.error(f"DeepSeek API failed | {e}")
+        return (
+            "I notice you're reflecting on your financial patterns. "
+            "Small, steady adjustments can make progress feel more natural. "
+            "You're building awareness, and that matters."
+        )
+
+# Main advice generator (FULL PROMPT)
 def generate_llm_suggestion(user_id, expense_summary, goal_summary):
-    """Generate personalized financial advice"""
+    """
+    Generate personalized, psychologically aligned financial advice.
+    """
     engine1 = fetch_engine1_scores(user_id)
 
     prompt = f"""
@@ -145,7 +142,7 @@ Interpretation Rules:
 OUTPUT REQUIREMENTS
 -----------------------------
 Your response MUST:
-1. Start with a calm behavioral observation (1–2 lines)
+1. Start with a calm behavioral observation (1-2 lines)
 2. Reference ONE spending pattern (not all)
 3. Reference ONE goal-related action
 4. Align advice with the user's archetype
@@ -166,5 +163,4 @@ Tone:
 Generate the final response now.
 """
 
-    recommendation = deepseek_generate(prompt)
-    return recommendation
+    return deepseek_generate(prompt)

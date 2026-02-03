@@ -1,41 +1,77 @@
-# surplus_simulation.py
+#(PURE SIMULATION)
+from db import fetch_all
+import logging
 
-from db import fetch_all, execute
+logger = logging.getLogger("engine2-surplus")
 
-def simulate_surplus(user_id, expense_total):
-    surplus = 0 - expense_total
-    if surplus <= 0:
-        return {"surplus": 0, "allocations": []}
 
-    goals = fetch_all("""
-        SELECT id, target_amount, saved_amount
-        FROM goals
+def simulate_surplus(user_id):
+    """
+    PURE surplus simulation.
+    Reads data, calculates surplus, suggests allocations.
+    Does NOT update database.
+    """
+
+    # ---------- Fetch TOTAL income ----------
+    income_rows = fetch_all("""
+        SELECT COALESCE(SUM(amount), 0) AS total_income
+        FROM income
         WHERE user_id = %s
     """, (user_id,))
 
-    allocations = []
+    total_income = float(income_rows[0]["total_income"]) if income_rows else 0.0
+
+    # ---------- Fetch TOTAL expense ----------
+    expense_rows = fetch_all("""
+        SELECT COALESCE(SUM(amount), 0) AS total_expense
+        FROM expenses
+        WHERE user_id = %s
+    """, (user_id,))
+
+    total_expense = float(expense_rows[0]["total_expense"]) if expense_rows else 0.0
+
+    surplus = total_income - total_expense
+
+    if surplus <= 0:
+        return {
+            "surplus": 0.0,
+            "suggested_allocations": [],
+            "remaining_unallocated": 0.0
+        }
+
+    # ---------- Fetch goals ----------
+    goals = fetch_all("""
+        SELECT goal_id as id, target_amount, current_saved
+        FROM goals
+        WHERE user_id = %s
+        ORDER BY id
+    """, (user_id,))
+
     remaining = surplus
+    suggestions = []
 
     for goal in goals:
-        needed = goal["target_amount"] - goal["saved_amount"]
-        if needed <= 0 or remaining <= 0:
+        if remaining <= 0:
+            break
+
+        needed = float(goal["target_amount"]) - float(goal["current_saved"])
+        if needed <= 0:
             continue
 
-        allocation = min(needed, remaining)
-        remaining -= allocation
+        allocate = min(needed, remaining)
+        remaining -= allocate
 
-        execute("""
-            INSERT INTO goal_contributions (goal_id, user_id, amount)
-            VALUES (%s, %s, %s)
-        """, (goal["id"], user_id, allocation))
-
-        allocations.append({
+        suggestions.append({
             "goal_id": goal["id"],
-            "allocated": float(allocation)
+            "suggested_amount": round(allocate, 2)
         })
 
+    logger.info(
+        f"Surplus simulated | user_id={user_id} | surplus={surplus}"
+    )
+
     return {
-        "surplus": float(surplus),
-        "allocations": allocations,
-        "remaining_unallocated": float(remaining)
+        "surplus": round(surplus, 2),
+        "suggested_allocations": suggestions,
+        "remaining_unallocated": round(remaining, 2)
     }
