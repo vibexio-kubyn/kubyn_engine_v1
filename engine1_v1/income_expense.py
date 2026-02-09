@@ -90,7 +90,7 @@ def _extract_expense(q: Dict[str, Any]) -> int:
 
 def _extract_savings(q: Dict[str, Any]) -> int:
     """
-    Extract savings percentage ONLY from `monthly_saving_percentage`.
+    Extract savings percentage ONLY from `monthly_saving_percentage.
     """
     value = q.get("monthly_saving_percentage")
 
