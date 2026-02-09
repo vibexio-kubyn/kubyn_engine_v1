@@ -56,7 +56,7 @@ def compute_score(payload: Dict[str, Any]):
         user_context = {"id": user_id}
         result = process_engine_one(user_context, answers)
 
-        #store_engine1_output(user_id, result)
+        store_engine1_output(user_id, result)
 
         return {
             "status": "success",
