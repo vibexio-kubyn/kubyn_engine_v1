@@ -1,14 +1,19 @@
 def apply_inconsistency(
-    base_projection,
-    confidence_score,
-    contribution_rows
-):
+    base_projection: list,
+    confidence_score: float,
+    contribution_rows: list
+) -> list:
     """
     Applies behavioral inconsistency to monthly projections
-    based on psychological risk + past saving discipline.
+    by reducing savings in certain months instead of removing them.
     """
 
-    # SAFELY count zero or missed contributions
+    if not base_projection:
+        return []
+
+    confidence_score = confidence_score or 50  # safe default
+
+    # Count missed or zero contributions
     zero_contrib_months = sum(
         1 for r in contribution_rows
         if r.get("current_saved", 0) <= 0
@@ -20,13 +25,24 @@ def apply_inconsistency(
 
     total_risk = min(0.4, psychological_risk + behavior_risk)
 
-    skip_every = max(3, int(1 / max(total_risk, 0.05)))
+    # Determine how often inconsistency happens
+    skip_every = max(3, min(12, int(1 / max(total_risk, 0.05))))
 
     adjusted = []
-    for i, amount in enumerate(base_projection):
+    running_total = 0.0
+
+    for i, month in enumerate(base_projection):
+        value = month["value"]
+
+        # Bad saving month → partial saving
         if (i + 1) % skip_every == 0:
-            continue
-        adjusted.append(amount)
+            value *= 0.5  # lose 50% savings this month
+
+        running_total = value
+
+        adjusted.append({
+            **month,
+            "value": round(running_total, 2)
+        })
 
     return adjusted
-

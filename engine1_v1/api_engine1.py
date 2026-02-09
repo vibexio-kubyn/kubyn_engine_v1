@@ -38,30 +38,25 @@ def health():
 
 @app.post("/compute_score")
 def compute_score(payload: Dict[str, Any]):
-    """
-    Expected payload:
-    {
-        "user_id": "1",
-        "answer": { ... }
-    }
-    """
 
-    user_id = payload.get("user_id")
-    answer = payload.get("answer")
+    user_ids = payload.get("user_id")
+    answers = payload.get("answers")
 
-    if not user_id:
-        raise HTTPException(status_code=400, detail="user_id is required")
+    if not user_ids or not isinstance(user_ids, list):
+        raise HTTPException(status_code=400, detail="user_id must be a list")
 
-    if not answer or not isinstance(answer, dict):
-        raise HTTPException(status_code=400, detail="answer must be a valid object")
+    if not answers or not isinstance(answers, dict):
+        raise HTTPException(status_code=400, detail="answers must be a valid object")
+
+    user_id = user_ids[0]
 
     try:
         logger.info(f"Starting Engine-1 processing for user {user_id}")
 
         user_context = {"id": user_id}
-        result = process_engine_one(user_context, answer)
+        result = process_engine_one(user_context, answers)
 
-        store_engine1_output(user_id, result)
+        #store_engine1_output(user_id, result)
 
         return {
             "status": "success",
@@ -69,6 +64,7 @@ def compute_score(payload: Dict[str, Any]):
             "engine": "engine1",
             "result": result
         }
+
     except ValueError as e:
         logger.warning(f"Validation error for user {user_id}: {e}")
         raise HTTPException(status_code=400, detail=str(e))

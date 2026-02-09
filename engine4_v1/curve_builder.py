@@ -1,28 +1,41 @@
-def derive_loss_profile(loss_curve):
+def derive_loss_profile(loss_curve: list) -> dict:
     """
-    Determines safe and critical zones + profile.
+    Determines loss aversion profile and exposure zones
+    based on stability thresholds.
     """
 
-    safe_zone = None
-    critical_zone = None
+    if not loss_curve:
+        return {
+            "loss_aversion_profile": "Unknown",
+            "safe_exposure_zone": None,
+            "critical_loss_zone": None
+        }
+
+    safe_breach = None
+    critical_breach = None
 
     for point in loss_curve:
-        if point["stability"] < 70 and safe_zone is None:
-            safe_zone = point["loss_percent"]
-        if point["stability"] < 40 and critical_zone is None:
-            critical_zone = point["loss_percent"]
+        stability = point["stability"]
+        loss = point["loss_percent"]
 
-    if critical_zone is None:
+        if stability < 70 and safe_breach is None:
+            safe_breach = loss
+
+        if stability < 40 and critical_breach is None:
+            critical_breach = loss
+
+    # ---- PROFILE CLASSIFICATION ----
+    if critical_breach is None:
         profile = "Resilient"
-    elif critical_zone <= -12:
+    elif critical_breach <= -12:
         profile = "Adaptive"
-    elif critical_zone <= -8:
+    elif -12 < critical_breach <= -8:
         profile = "Reactive"
     else:
         profile = "Avoidant"
 
     return {
         "loss_aversion_profile": profile,
-        "safe_exposure_zone": safe_zone,
-        "critical_loss_zone": critical_zone
+        "safe_exposure_zone": safe_breach,
+        "critical_loss_zone": critical_breach
     }

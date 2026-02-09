@@ -1,5 +1,8 @@
 import pymysql
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_connection():
     return pymysql.connect(
@@ -17,6 +20,9 @@ def fetch_one(query, params=None):
         with conn.cursor() as cur:
             cur.execute(query, params or ())
             return cur.fetchone()
+    except Exception:
+        logger.exception("fetch_one failed")
+        raise
     finally:
         conn.close()
 
@@ -26,6 +32,9 @@ def fetch_all(query, params=None):
         with conn.cursor() as cur:
             cur.execute(query, params or ())
             return cur.fetchall()
+    except Exception:
+        logger.exception("fetch_all failed")
+        raise
     finally:
         conn.close()
 
@@ -34,6 +43,10 @@ def execute(query, params=None):
     try:
         with conn.cursor() as cur:
             cur.execute(query, params or ())
-            conn.commit()
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        logger.exception("execute failed, transaction rolled back")
+        raise
     finally:
         conn.close()

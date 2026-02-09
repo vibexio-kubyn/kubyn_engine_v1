@@ -120,10 +120,10 @@ def store_engine1_output(user_id: str, result: dict):
 
     try:
         conn = pymysql.connect(
-            host=os.getenv("localhost"),
-            user=os.getenv("kubyn"),
-            password=os.getenv("Venkat@3929"),
-            database=os.getenv("kubyn"),
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            database=os.getenv("DB_NAME"),
             port=3306,
             cursorclass=pymysql.cursors.Cursor
         )
@@ -157,3 +157,7 @@ def store_engine1_output(user_id: str, result: dict):
     except Exception:
         logger.exception(f"Failed to store Engine-1 output for user {user_id}")
         raise
+    
+    finally:
+        if conn:
+            conn.close()
