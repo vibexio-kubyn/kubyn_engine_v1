@@ -15,7 +15,7 @@ def simulate_surplus(user_id):
     # ---------- Fetch TOTAL income ----------
     income_rows = fetch_all("""
         SELECT COALESCE(SUM(amount), 0) AS total_income
-        FROM income
+        FROM incomes
         WHERE user_id = %s
     """, (user_id,))
 

@@ -1,17 +1,35 @@
-# config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 MYSQL_CONFIG = {
-    "host": "localhost",
-    "user": "kubyn",
-    "password": "Venkat@3929",
-    "database": "kubyn",
-    "port": 3306
+    "host": os.getenv("MYSQL_HOST"),
+    "user": os.getenv("MYSQL_USER"),
+    "password": os.getenv("MYSQL_PASSWORD"),
+    "database": os.getenv("MYSQL_DATABASE"),
+    "port": int(os.getenv("MYSQL_PORT"))
 }
 
-# DeepSeek local / self-hosted placeholder
 DEEPSEEK_CONFIG = {
-    "api_key": "REMOVED60cbc90e54bd4c77939703e9b0e85935",  # Replace with actual API key
+    "api_key": os.getenv("DEEPSEEK_API_KEY"),
     "model": "deepseek-chat",
     "temperature": 0.6,
     "max_tokens": 500
 }
+
+OPENAI_CONFIG = {
+    "api_key": os.getenv("OPENAI_API_KEY"),
+    "model": "gpt-4o-mini",
+    "temperature": 0.6,
+    "max_tokens": 500
+}
+
+GEMINI_CONFIG = {
+    "api_key": os.getenv("GEMINI_API_KEY"),
+    "model": "gemini-3-flash-preview",
+    "temperature": 0.6,
+    "max_tokens": 500
+}
+
+

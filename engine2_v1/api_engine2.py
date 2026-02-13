@@ -2,13 +2,13 @@ import sys
 import os
 import logging
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import engine2 once
-import engine2
+# Import engine2
+from engine2 import run_engine2
 
 # Logging config
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +17,8 @@ logger = logging.getLogger("engine2-api")
 app = FastAPI(title="Engine 2 API")
 
 class Engine2Payload(BaseModel):
-    user_id: str
+    user_id: int
+    model_config =ConfigDict(extra="allow")
 
 @app.get("/")
 def root():
@@ -32,10 +33,11 @@ def trigger_engine2(payload: Engine2Payload):
     """
     Triggers Engine 2 when finance / goal events happen
     """
-    logger.info(f"ENGINE 2 API HIT | user_id={payload.user_id}")
+    logger.info("ENGINE 2 API HIT")
+    logger.info(f"FULL PAYLOAD={payload.model_dump()}")
 
     try:
-        result = engine2.run_engine2(user_id=payload.user_id)
+        result =run_engine2(user_id=payload.user_id)
 
         return {
             "status": "success",

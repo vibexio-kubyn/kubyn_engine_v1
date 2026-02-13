@@ -1,11 +1,33 @@
-import requests
 import pymysql
 import logging
-from config import DEEPSEEK_CONFIG, MYSQL_CONFIG
+from openai import OpenAI
+from google import genai
+
+from config import (
+    DEEPSEEK_CONFIG,
+    OPENAI_CONFIG,
+    GEMINI_CONFIG,
+    MYSQL_CONFIG
+)
 
 logger = logging.getLogger("engine2-llm")
 
-# Fetch Engine 1 scores
+# OpenAI client
+openai_client = OpenAI(
+    api_key=OPENAI_CONFIG["api_key"]
+)
+
+# DeepSeek client (OpenAI-compatible API)
+deepseek_client = OpenAI(
+    api_key=DEEPSEEK_CONFIG["api_key"],
+    base_url="https://api.deepseek.com"
+)
+
+# Gemini client
+gemini_client = genai.Client(
+    api_key=GEMINI_CONFIG["api_key"]
+)
+
 def fetch_engine1_scores(user_id):
     try:
         conn = pymysql.connect(
@@ -56,111 +78,122 @@ def fetch_engine1_scores(user_id):
             "archetype": "Safety Netter"
         }
 
-# DeepSeek LLM call
 def deepseek_generate(prompt):
-    """
-    Generate response using DeepSeek LLM.
-    """
     try:
-        response = requests.post(
-            DEEPSEEK_CONFIG["url"],
-            headers={
-                "Authorization": f"Bearer {DEEPSEEK_CONFIG['api_key']}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": DEEPSEEK_CONFIG["model"],
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": DEEPSEEK_CONFIG["temperature"],
-                "max_tokens": DEEPSEEK_CONFIG["max_tokens"]
-            },
-            timeout=30
+        response = deepseek_client.chat.completions.create(
+            model=DEEPSEEK_CONFIG["model"],
+            messages=[{"role": "user", "content": prompt}],
+            temperature=DEEPSEEK_CONFIG["temperature"],
+            max_tokens=DEEPSEEK_CONFIG["max_tokens"]
         )
 
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"]
+        return response.choices[0].message.content
 
     except Exception as e:
-        logger.error(f"DeepSeek API failed | {e}")
-        return (
-            "I notice you're reflecting on your financial patterns. "
-            "Small, steady adjustments can make progress feel more natural. "
-            "You're building awareness, and that matters."
+        raise Exception(f"DeepSeek failed | {str(e)}")
+
+
+def openai_generate(prompt):
+    try:
+        response = openai_client.chat.completions.create(
+            model=OPENAI_CONFIG["model"],
+            messages=[{"role": "user", "content": prompt}],
+            temperature=OPENAI_CONFIG["temperature"],
+            max_tokens=OPENAI_CONFIG["max_tokens"]
         )
 
-# Main advice generator (FULL PROMPT)
+        return response.choices[0].message.content
+
+    except Exception as e:
+        raise Exception(f"OpenAI failed | {str(e)}")
+
+
+def gemini_generate(prompt):
+    try:
+        response = gemini_client.models.generate_content(
+            model=GEMINI_CONFIG["model"],
+            contents=prompt,
+            config={
+                "temperature": GEMINI_CONFIG["temperature"],
+                "max_output_tokens": GEMINI_CONFIG["max_tokens"]
+            }
+        )
+
+        if not response.text:
+            raise Exception("Empty Gemini response")
+
+        return response.text
+
+    except Exception as e:
+        raise Exception(f"Gemini failed | {str(e)}")
+
+
+def llm_generate(prompt):
+    """
+    Failover order:
+    1. DeepSeek
+    2. OpenAI
+    3. Gemini
+
+    Returns first successful response.
+    Never exposes provider failures.
+    """
+
+    # 1️⃣ DeepSeek
+    try:
+        result = deepseek_generate(prompt)
+        logger.info("LLM success | provider=DeepSeek")
+        return result
+    except Exception as e:
+        logger.error(f"LLM failure | provider=DeepSeek | error={e}")
+
+    # 2️⃣ OpenAI
+    try:
+        result = openai_generate(prompt)
+        logger.info("LLM success | provider=OpenAI")
+        return result
+    except Exception as e:
+        logger.error(f"LLM failure | provider=OpenAI | error={e}")
+
+    # 3️⃣ Gemini
+    try:
+        result = gemini_generate(prompt)
+        logger.info("LLM success | provider=Gemini")
+        return result
+    except Exception as e:
+        logger.error(f"LLM failure | provider=Gemini | error={e}")
+
+    logger.critical("All LLM providers failed")
+
+    return "AI service temporarily unavailable. Please try again shortly."
+
 def generate_llm_suggestion(user_id, expense_summary, goal_summary):
-    """
-    Generate personalized, psychologically aligned financial advice.
-    """
     engine1 = fetch_engine1_scores(user_id)
 
     prompt = f"""
-You are a behavioral finance intelligence system.
-
-Your task is to generate personalized, psychologically aligned financial guidance.
-You must NOT provide generic advice.
-You must NOT use fear, urgency, or pressure-based language.
-
------------------------------
-USER PSYCHOLOGICAL PROFILE (ENGINE 1)
------------------------------
+ou are a behavioral finance intelligence system. 
+Your task is to generate personalized, psychologically aligned financial guidance. 
+You must NOT provide generic advice. You must NOT use fear, urgency, or pressure-based language. 
+----------------------------- USER PSYCHOLOGICAL PROFILE (ENGINE 1) ----------------------------- 
 Confidence Score: {engine1['confidence_score']} (0–100)
-Income–Expense Discipline Score: {engine1['income_expense_score']} (0–100)
-Personality Type: {engine1['personality_type']}
-Financial Archetype: {engine1['archetype']}
+ Income–Expense Discipline Score: {engine1['income_expense_score']} 
+ (0–100) Personality Type: {engine1['personality_type']}
+   Financial Archetype: {engine1['archetype']} 
+   ----------------------------- EXPENSE BEHAVIOUR ANALYSIS ----------------------------- 
+   {expense_summary} 
+   ----------------------------- GOAL & SURPLUS SIMULATION -----------------------------
+     {goal_summary} ----------------------------- OUTPUT REQUIREMENTS ----------------------------- 
+     1. Start with calm behavioral observation 
+     2. Reference ONE spending pattern 
+     3. Reference ONE goal-related action 
+     4. Align with archetype 
+     5. End with confidence-preserving close 
+    Your response MUST NOT - 
+    Mention "AI", 
+    "model", or "algorithm" - 
+    Give investment tips - 
+    Suggest financial products - 
+    Use absolute words like "always", "never", "must" Tone: Human, grounded, supportive.
+    Generate final response now. """
 
-Interpretation Rules:
-- Low confidence → reassurance, small steps
-- High confidence → structured, autonomy-respecting advice
-- Archetype defines long-term vs short-term framing
-- Personality defines tone and motivation style
-
------------------------------
-EXPENSE BEHAVIOUR ANALYSIS
------------------------------
-{expense_summary}
-
-Interpretation Rules:
-- Identify overspending categories
-- Do NOT shame the user
-- Reframe spending as behavior patterns, not mistakes
-- Suggest adjustment ranges, not hard cuts
-
------------------------------
-GOAL & SURPLUS SIMULATION
------------------------------
-{goal_summary}
-
-Interpretation Rules:
-- Explain why surplus allocation matters psychologically
-- Reinforce consistency over speed
-- If surplus exists, frame it as optional empowerment
-- If no surplus, normalize and stabilize behavior
-
------------------------------
-OUTPUT REQUIREMENTS
------------------------------
-Your response MUST:
-1. Start with a calm behavioral observation (1-2 lines)
-2. Reference ONE spending pattern (not all)
-3. Reference ONE goal-related action
-4. Align advice with the user's archetype
-5. End with a confidence-preserving closing statement
-
-Your response MUST NOT:
-- Mention "AI", "model", or "algorithm"
-- Give investment tips
-- Suggest financial products
-- Use absolute words like "always", "never", "must"
-
-Tone:
-- Human
-- Grounded
-- Supportive
-- Non-judgmental
-
-Generate the final response now.
-"""
-
-    return deepseek_generate(prompt)
+    return llm_generate(prompt)

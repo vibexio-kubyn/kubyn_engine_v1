@@ -1,19 +1,14 @@
-from datetime import datetime, timezone
-from dateutil.relativedelta import relativedelta
+from datetime import datetime
 
-
-def build_monthly_projection(monthly_saving: float, months: int) -> list:
+def build_monthly_projection(monthly_saving, months):
     """
     Builds a month-by-month cumulative savings projection.
     No behavior penalty applied here.
     """
 
-    if monthly_saving is None or months <= 0:
-        return []
-
     projection = []
     total = 0.0
-    current = datetime.now(timezone.utc).replace(day=1)
+    current = datetime.utcnow().replace(day=1)
 
     for i in range(1, months + 1):
         total += monthly_saving
@@ -24,6 +19,9 @@ def build_monthly_projection(monthly_saving: float, months: int) -> list:
             "value": round(total, 2)
         })
 
-        current += relativedelta(months=1)
+        if current.month == 12:
+            current = current.replace(year=current.year + 1, month=1)
+        else:
+            current = current.replace(month=current.month + 1)
 
     return projection

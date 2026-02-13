@@ -1,5 +1,12 @@
 import json
 import logging
+import os
+import sys
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("engine2-core")
@@ -28,7 +35,7 @@ def run_engine2(user_id, days=7):
         surplus_result = simulate_surplus(user_id=user_id)
     except Exception as e:
         logger.exception("Surplus simulation failed")
-        raise RuntimeError("Surplus simulation failed") from e
+        raise 
 
     # 3. LLM suggestion
     try:
