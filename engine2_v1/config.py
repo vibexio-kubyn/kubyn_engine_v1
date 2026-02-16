@@ -1,35 +1,40 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Find the folder where THIS config.py exists
+CURRENT_DIR = Path(__file__).resolve().parent
 
-MYSQL_CONFIG = {
-    "host": os.getenv("MYSQL_HOST"),
-    "user": os.getenv("MYSQL_USER"),
-    "password": os.getenv("MYSQL_PASSWORD"),
-    "database": os.getenv("MYSQL_DATABASE"),
-    "port": int(os.getenv("MYSQL_PORT"))
+# Look for .env in the SAME folder
+ENV_FILE = CURRENT_DIR / ".env"
+
+# Load it explicitly (no guessing)
+load_dotenv(dotenv_path=ENV_FILE)
+
+# Now read variables
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+if not OPENROUTER_API_KEY:
+    raise RuntimeError(
+        f"OPENROUTER_API_KEY not found. Expected .env at: {ENV_FILE}"
+    )
+
+# Database
+DB_CONFIG = {
+    "host": os.getenv("DB_HOST"),
+    "user": os.getenv("DB_USER"),
+    "password": os.getenv("DB_PASSWORD"),
+    "database": os.getenv("DB_NAME"),
+    "port": int(os.getenv("DB_PORT", 3306))
 }
 
-DEEPSEEK_CONFIG = {
-    "api_key": os.getenv("DEEPSEEK_API_KEY"),
-    "model": "deepseek-chat",
-    "temperature": 0.6,
-    "max_tokens": 500
-}
+# Model priority
+MODEL_PRIORITY = [
+    os.getenv("PRIMARY_MODEL"),
+    os.getenv("SECONDARY_MODEL"),
+    os.getenv("BACKUP_MODEL")
+]
 
-OPENAI_CONFIG = {
-    "api_key": os.getenv("OPENAI_API_KEY"),
-    "model": "gpt-4o-mini",
-    "temperature": 0.6,
-    "max_tokens": 500
-}
-
-GEMINI_CONFIG = {
-    "api_key": os.getenv("GEMINI_API_KEY"),
-    "model": "gemini-3-flash-preview",
-    "temperature": 0.6,
-    "max_tokens": 500
-}
-
-
+MODEL_PRIORITY = [m for m in MODEL_PRIORITY if m]
+TEMPERATURE = float(os.getenv("TEMPERATURE", 0.6))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", 700))
